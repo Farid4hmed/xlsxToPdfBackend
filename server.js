@@ -3,43 +3,48 @@ const express = require('express');
 const app = express();
 const axios = require('axios')
 const FormData = require('form-data')
-const fs = require('fs')
-const multer = require('multer')
+const multer = require('multer');
 const cors = require('cors');
 app.use(cors());
-const upload = multer({ dest: 'uploads/' })
 
-app.post('/convert', upload.single('document'), async (req, res) => {
-  const formData = new FormData()
-  formData.append('instructions', JSON.stringify({
-    parts: [
-      {
-        file: "document"
-      }
-    ]
-  }))
-  formData.append('document', fs.createReadStream(req.file.path))
+const upload = multer({ storage: multer.memoryStorage() }).single('document');
 
-  try {
-    const response = await axios.post('https://api.pspdfkit.com/build', formData, {
-      headers: formData.getHeaders({
-        'Authorization': process.env.API_KEY
-      }),
-      responseType: "stream"
+app.post('/convert', async (req, res) => {
+  upload(req, res, async function () {
+    const formData = new FormData()
+    formData.append('instructions', JSON.stringify({
+      parts: [
+        {
+          file: "document"
+        }
+      ]
+    }))
+    formData.append('document', req.file.buffer, {
+      filename: req.file.originalname,
+      contentType: req.file.mimetype
     })
 
-    res.set({
-      'Content-Disposition': `attachment; filename=result.pdf`,
-      'Content-Type': 'application/pdf'
-    })
+    try {
+      const response = await axios.post('https://api.pspdfkit.com/build', formData, {
+        headers: formData.getHeaders({
+          'Authorization': process.env.API_KEY
+        }),
+        responseType: "stream"
+      })
 
-    response.data.pipe(res)
-  } catch (e) {
-    const errorString = await streamToString(e.response.data)
-    console.log(errorString)
-    res.status(500).send(errorString)
-  }
-})
+      res.set({
+        'Content-Disposition': `attachment; filename=result.pdf`,
+        'Content-Type': 'application/pdf'
+      })
+
+      response.data.pipe(res)
+    } catch (e) {
+      const errorString = await streamToString(e.response.data)
+      console.log(errorString)
+      res.status(500).send(errorString)
+    }
+  })
+});
 
 function streamToString(stream) {
   const chunks = []
@@ -50,9 +55,9 @@ function streamToString(stream) {
   })
 }
 
-const port = process.env.PORT || 8000;
-const host = process.env.HOST || `localhost`;
+const PORT = process.env.PORT || 8000;
+const HOST = process.env.HOST || 'localhost';
 
-app.listen(port, () => {
-  console.log(`Server is up and running at http://${host}:${port}`);
-});
+app.listen(PORT, () => {
+  console.log(`Server is running on http://${HOST}:${PORT}`);
+})
